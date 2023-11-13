@@ -13,7 +13,7 @@ from q2_trimmomatic import bin
 
 
 def trim_paired(
-    demultiplexed_sequences: SingleLanePerSamplePairedEndFastqDirFmt, min_length: int = 100
+    paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt, min_length: int = 100
 ) -> (
     CasavaOneEightSingleLanePerSampleDirFmt,
     CasavaOneEightSingleLanePerSampleDirFmt,
@@ -96,7 +96,7 @@ def trim_paired(
     # TODO: make adapted file path into an input
     adapter_path = resources.path(bin, "NexteraPE-PE.fa")
     with resources.path(bin, "trimmomatic-0.39.jar") as executable_path:
-        df = demultiplexed_sequences.manifest.view(pd.DataFrame)
+        df = paired_sequences.manifest.view(pd.DataFrame)
         for _, fwd, rev in df.itertuples():
             trimmed_paired_fwd = os.path.join(str(paired_end_trimmed), os.path.basename(fwd))
             trimmed_paired_rev = os.path.join(str(paired_end_trimmed), os.path.basename(rev))

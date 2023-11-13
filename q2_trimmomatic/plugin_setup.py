@@ -21,7 +21,7 @@ plugin.methods.register_function(
     name="remove adpaters from paired sequences and quality trim",
     description="remove adpaters from paired sequences and quality trim",
     inputs={
-        "demultiplexed_sequences": SampleData[PairedEndSequencesWithQuality],
+        "paired_sequences": SampleData[PairedEndSequencesWithQuality],
     },
     parameters={"min_length": Int % Range(1, None)},
     outputs=[
@@ -29,7 +29,7 @@ plugin.methods.register_function(
         ("unpaired_fwd", SampleData[SequencesWithQuality]),
         ("unpaired_rev", SampleData[SequencesWithQuality]),
     ],
-    input_descriptions={"demultiplexed_sequences": "illumina paired sequence data"},
+    input_descriptions={"paired_sequences": "illumina paired sequence data"},
     parameter_descriptions={"min_length": "sequences shorter than this length will be discarded"},
     output_descriptions={
         "paired_end_trimmed": "paired trimmed sequence data",

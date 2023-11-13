@@ -13,7 +13,7 @@ from q2_trimmomatic import bin
 
 
 def trim_paired(
-    paired_sequences: SingleLanePerSampleSingleEndFastqDirFmt, min_length: int = 100
+    demultiplexed_sequences: SingleLanePerSamplePairedEndFastqDirFmt, min_length: int = 100
 ) -> (
     CasavaOneEightSingleLanePerSampleDirFmt,
     CasavaOneEightSingleLanePerSampleDirFmt,
@@ -90,13 +90,13 @@ def trim_paired(
 
     # syscommand = f"java -jar {trimmomatic_path} PE {pe1_fastq_gz} {pe2_fastq_gz} {trimmed_pe1} {trimmed_u1} {trimmed_pe2} {trimmed_u2} ILLUMINACLIP:{adapter_path}NexteraPE-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:100"
     # subprocess.call(syscommand, shell=True)
-    df = paired_sequences.manifest.view(pd.DataFrame)  # type: ignore
     paired_end_trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
     # TODO: make adapted file path into an input
     adapter_path = resources.path(bin, "NexteraPE-PE.fa")
     with resources.path(bin, "trimmomatic-0.39.jar") as executable_path:
+        df = demultiplexed_sequences.manifest.view(pd.DataFrame)
         for _, fwd, rev in df.itertuples():
             trimmed_paired_fwd = os.path.join(str(paired_end_trimmed), os.path.basename(fwd))
             trimmed_paired_rev = os.path.join(str(paired_end_trimmed), os.path.basename(rev))

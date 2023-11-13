@@ -12,8 +12,8 @@ from q2_types.per_sample_sequences import (
 from q2_trimmomatic import bin
 
 
-def trim_reads_via_trimmomatic(
-    paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt,
+def trim_paired(
+    paired_sequences: SingleLanePerSampleSingleEndFastqDirFmt, min_length: int = 100
 ) -> (
     CasavaOneEightSingleLanePerSampleDirFmt,
     CasavaOneEightSingleLanePerSampleDirFmt,
@@ -118,7 +118,7 @@ def trim_reads_via_trimmomatic(
                     "LEADING:3",
                     "TRAILING:3",
                     "SLIDINGWINDOW:4:15",
-                    "MINLEN:100",
+                    f"MINLEN:{min_length}",
                 ]
             )
     return paired_end_trimmed, unpaired_fwd, unpaired_rev

@@ -1,6 +1,6 @@
 """Gatk python library."""
-from ._trimmomatic import trim_reads_via_trimmomatic
+from ._trimmomatic import trim_paired
 
 __version__ = "0.0.0"
 
-__all__ = ["trim_reads_via_trimmomatic"]
+__all__ = ["trim_paired"]

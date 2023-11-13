@@ -1,20 +1,24 @@
-from importlib import resources
-from q2_trimmomatic import bin
-import subprocess
 import os
+import subprocess
+from importlib import resources
+
+import pandas as pd
 from q2_types.per_sample_sequences import (
+    CasavaOneEightSingleLanePerSampleDirFmt,
     SingleLanePerSamplePairedEndFastqDirFmt,
     SingleLanePerSampleSingleEndFastqDirFmt,
 )
-import pandas as pd
+
+from q2_trimmomatic import bin
 
 
-###TRIM READS USING TRIMMOMATIC
-# LVN updated trimmomatic path
 def trim_reads_via_trimmomatic(
     paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt,
-    # pe1_fastq_gz, pe2_fastq_gz, sample_base_name="", trimmomatic_path='/z/home/lvn/miniconda3/envs/trimmomatic/share/trimmomatic-0.39-2/trimmomatic.jar', adapter_path = '/z/home/lvn/miniconda3/envs/trimmomatic/share/trimmomatic-0.39-2/adapters/'
-):
+) -> (
+    CasavaOneEightSingleLanePerSampleDirFmt,
+    CasavaOneEightSingleLanePerSampleDirFmt,
+    CasavaOneEightSingleLanePerSampleDirFmt,
+):  # type: ignore
     """
     Purpose:  trim paired end reads using trimmomatic
 
@@ -87,11 +91,11 @@ def trim_reads_via_trimmomatic(
     # syscommand = f"java -jar {trimmomatic_path} PE {pe1_fastq_gz} {pe2_fastq_gz} {trimmed_pe1} {trimmed_u1} {trimmed_pe2} {trimmed_u2} ILLUMINACLIP:{adapter_path}NexteraPE-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:100"
     # subprocess.call(syscommand, shell=True)
     df = paired_sequences.manifest.view(pd.DataFrame)  # type: ignore
-    paired_end_trimmed = SingleLanePerSamplePairedEndFastqDirFmt()
-    unpaired_fwd = SingleLanePerSampleSingleEndFastqDirFmt()
-    unpaired_rev = SingleLanePerSampleSingleEndFastqDirFmt()
+    paired_end_trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
+    unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
+    unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
     # TODO: make adapted file path into an input
-    adpater_path = resources.path(bin, "NexteraPE-PE.fa")
+    adapter_path = resources.path(bin, "NexteraPE-PE.fa")
     with resources.path(bin, "trimmomatic-0.39.jar") as executable_path:
         for _, fwd, rev in df.itertuples():
             trimmed_paired_fwd = os.path.join(str(paired_end_trimmed), os.path.basename(fwd))
@@ -110,7 +114,7 @@ def trim_reads_via_trimmomatic(
                     trimmed_unpaired_fwd,
                     trimmed_paired_rev,
                     trimmed_unpaired_rev,
-                    "ILLUMINACLIP:{adapter_path}:2:30:10",
+                    f"ILLUMINACLIP:{adapter_path}:2:30:10",
                     "LEADING:3",
                     "TRAILING:3",
                     "SLIDINGWINDOW:4:15",

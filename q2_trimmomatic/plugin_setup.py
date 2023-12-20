@@ -1,7 +1,11 @@
-from qiime2.plugin import Plugin, Int, Range
-import q2_trimmomatic
+from q2_types.per_sample_sequences import (
+    PairedEndSequencesWithQuality,
+    SequencesWithQuality,
+)
 from q2_types.sample_data import SampleData
-from q2_types.per_sample_sequences import PairedEndSequencesWithQuality
+from qiime2.plugin import Int, Plugin, Range
+
+import q2_trimmomatic
 
 plugin = Plugin(
     name="trimmomatic",
@@ -16,12 +20,14 @@ plugin.methods.register_function(
     function=q2_trimmomatic.trim_paired,
     name="remove adpaters from paired sequences and quality trim",
     description="remove adpaters from paired sequences and quality trim",
-    inputs={"paired_sequences": SampleData[PairedEndSequencesWithQuality]},
+    inputs={
+        "paired_sequences": SampleData[PairedEndSequencesWithQuality],
+    },
     parameters={"min_length": Int % Range(1, None)},
     outputs=[
         ("paired_end_trimmed", SampleData[PairedEndSequencesWithQuality]),
-        ("unpaired_fwd", SampleData[PairedEndSequencesWithQuality]),
-        ("unpaired_rev", SampleData[PairedEndSequencesWithQuality]),
+        ("unpaired_fwd", SampleData[SequencesWithQuality]),
+        ("unpaired_rev", SampleData[SequencesWithQuality]),
     ],
     input_descriptions={"paired_sequences": "illumina paired sequence data"},
     parameter_descriptions={"min_length": "sequences shorter than this length will be discarded"},

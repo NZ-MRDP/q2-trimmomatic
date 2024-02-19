@@ -10,11 +10,10 @@ from q2_types.per_sample_sequences import (
 )
 
 from q2_trimmomatic import bin
+from q2_trimmomatic.bin import adapters
 
 
-def trim_paired(
-    paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt, min_length: int = 100
-) -> (
+def trim_paired(paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt, min_length: int = 100) -> (
     CasavaOneEightSingleLanePerSampleDirFmt,
     CasavaOneEightSingleLanePerSampleDirFmt,
     CasavaOneEightSingleLanePerSampleDirFmt,
@@ -94,7 +93,9 @@ def trim_paired(
     unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
     # TODO: make adapted file path into an input
-    adapter_path = resources.path(bin, "NexteraPE-PE.fa")
+    adapter_path = None
+    with resources.path(adapters, "NexteraPE-PE.fa") as fa_path:
+        adapter_path = fa_path
     with resources.path(bin, "trimmomatic-0.39.jar") as executable_path:
         df = paired_sequences.manifest.view(pd.DataFrame)
         for _, fwd, rev in df.itertuples():

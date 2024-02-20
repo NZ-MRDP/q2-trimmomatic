@@ -93,10 +93,9 @@ def trim_paired(paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt, min_l
     unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
     # TODO: make adapted file path into an input
-    adapter_path = None
-    with resources.path(adapters, "NexteraPE-PE.fa") as fa_path:
-        adapter_path = fa_path
-    with resources.path(bin, "trimmomatic-0.39.jar") as executable_path:
+    with resources.path(adapters, "NexteraPE-PE.fa") as adapter_path, resources.path(
+        bin, "trimmomatic-0.39.jar"
+    ) as executable_path:
         df = paired_sequences.manifest.view(pd.DataFrame)
         for _, fwd, rev in df.itertuples():
             trimmed_paired_fwd = os.path.join(str(paired_end_trimmed), os.path.basename(fwd))

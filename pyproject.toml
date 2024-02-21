@@ -33,3 +33,6 @@ line-length = 119
 
 [tool.isort]
 profile = "black"
+  
+[tool.poetry-version-plugin]
+source = "init"

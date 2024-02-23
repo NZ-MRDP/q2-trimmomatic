@@ -7,9 +7,11 @@ from qiime2.plugin import Int, Plugin, Range
 
 import q2_trimmomatic
 
+from . import __version__
+
 plugin = Plugin(
     name="trimmomatic",
-    version="0.0.0",
+    version=__version__,
     description="QIIME2 plugin for trimmomatic",
     website="https://github.com/NZ-MRDP/q2-trimmomatic",
     package="q2_trimmomatic",

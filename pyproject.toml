@@ -1,38 +1,37 @@
-[tool.poetry]
+[project]
 name = "q2-trimmomatic"
-description = ""
-version = "0.0.0"
+version = "0.1.0"
+description = "QIIME2 plugin for trimmomatic"
 authors = []
-packages = [{include = "q2_trimmomatic"}]
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=1.5.2",
+    "numpy>=1.23.5",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8.1"
-pandas = "1.5.2"
-numpy = "1.23.5"
-
-[tool.poetry.group.dev.dependencies]
-flake8 = "^6.0.0"
-black = "^23.1.0"
-isort = "^5.12.0"
-codespell = "^2.2.2"
-flake8-docstrings = "^1.7.0"
-pyright = "^1.1.293"
-pytest-cov = "^4.0.0"
-pytest-isort = "^3.1.0"
+[project.entry-points."qiime2.plugins"]
+"q2-trimmomatic" = "q2_trimmomatic.plugin_setup:plugin"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-#This doesn't seem to work, I think it is a qiime issue though
-[tool.poetry.plugins."qiime2.plugins"]
-"q2-trimmomatic" = "q2-trimmomatic=q2_trimmomatic.plugin_setup:plugin"
+[tool.hatch.build.targets.wheel]
+packages = ["q2_trimmomatic"]
 
-[tool.black]
+[dependency-groups]
+dev = [
+    "ruff>=0.3.0",
+    "codespell>=2.2.2",
+    "pytest-cov>=4.0.0",
+    "pyright>=1.1.293",
+]
+
+[tool.ruff]
 line-length = 119
 
-[tool.isort]
-profile = "black"
-  
-[tool.poetry-version-plugin]
-source = "init"
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+# black-compatible formatting

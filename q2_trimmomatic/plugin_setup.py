@@ -48,6 +48,10 @@ _SHARED_PARAMETER_DESCRIPTIONS = {
         "Useful for removing primer sequences. Set to 0 to disable."
     ),
     "crop": "Cut reads to this length by removing bases from the end (CROP). Set to 0 to disable.",
+    "seed_mismatches": (
+        "Maximum mismatches allowed in the adapter seed during ILLUMINACLIP. Higher values are more permissive."
+    ),
+    "simple_clip_threshold": "Threshold for simple adapter clipping in ILLUMINACLIP.",
 }
 
 _SHARED_PARAMETERS = {
@@ -58,6 +62,18 @@ _SHARED_PARAMETERS = {
     "min_length": Int % Range(1, None),
     "head_crop": Int % Range(0, None),
     "crop": Int % Range(0, None),
+    "seed_mismatches": Int % Range(0, None),
+    "simple_clip_threshold": Int % Range(0, None),
+}
+
+_PAIRED_ONLY_PARAMETER_DESCRIPTIONS = {
+    "palindrome_clip_threshold": (
+        "Threshold for palindrome adapter clipping in paired-end ILLUMINACLIP mode."
+    ),
+}
+
+_PAIRED_ONLY_PARAMETERS = {
+    "palindrome_clip_threshold": Int % Range(0, None),
 }
 
 plugin = Plugin(
@@ -79,6 +95,7 @@ plugin.methods.register_function(
     parameters={
         "adapter_file": Str % Choices(_ADAPTER_FILES_PE),
         **_SHARED_PARAMETERS,
+        **_PAIRED_ONLY_PARAMETERS,
     },
     outputs=[
         ("paired_end_trimmed", SampleData[PairedEndSequencesWithQuality]),
@@ -91,11 +108,12 @@ plugin.methods.register_function(
     parameter_descriptions={
         "adapter_file": _ADAPTER_FILE_DESCRIPTION,
         **_SHARED_PARAMETER_DESCRIPTIONS,
+        **_PAIRED_ONLY_PARAMETER_DESCRIPTIONS,
     },
     output_descriptions={
-        "paired_end_trimmed": "Trimmed paired-end sequence data.",
-        "unpaired_fwd": "Trimmed unpaired forward reads.",
-        "unpaired_rev": "Trimmed unpaired reverse reads.",
+        "paired_end_trimmed": "Trimmed paired-end reads where both mates passed filtering.",
+        "unpaired_fwd": "Trimmed forward reads whose reverse mate failed filtering.",
+        "unpaired_rev": "Trimmed reverse reads whose forward mate failed filtering.",
     },
 )
 
@@ -121,6 +139,6 @@ plugin.methods.register_function(
         **_SHARED_PARAMETER_DESCRIPTIONS,
     },
     output_descriptions={
-        "trimmed": "Trimmed single-end sequence data.",
+        "trimmed": "Trimmed single-end reads that passed the requested adapter and quality filters.",
     },
 )

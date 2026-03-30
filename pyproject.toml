@@ -3,7 +3,7 @@ name = "q2-trimmomatic"
 version = "0.1.0"
 description = "QIIME2 plugin for trimmomatic"
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "pandas>=1.5.2",
     "numpy>=1.23.5",
@@ -31,7 +31,17 @@ dev = [
 line-length = 119
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["D", "E", "F", "I"]
+ignore = ["D203", "D213"]
 
 [tool.ruff.format]
 # black-compatible formatting
+
+[tool.ruff.lint.isort]
+known-first-party = ["q2_trimmomatic"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.pyright]
+reportMissingImports = false

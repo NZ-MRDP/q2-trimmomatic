@@ -3,6 +3,7 @@
 import os
 import subprocess
 from importlib.resources import files
+from typing import Tuple
 
 import pandas as pd
 from q2_types.per_sample_sequences import (
@@ -21,11 +22,14 @@ def trim_paired(
     min_length: int = 100,
     head_crop: int = 0,
     crop: int = 0,
-) -> (
+    seed_mismatches: int = 2,
+    palindrome_clip_threshold: int = 30,
+    simple_clip_threshold: int = 10,
+) -> Tuple[
     SingleLanePerSamplePairedEndFastqDirFmt,
     SingleLanePerSampleSingleEndFastqDirFmt,
     SingleLanePerSampleSingleEndFastqDirFmt,
-):  # type: ignore[syntax]
+]:
     """Trim paired-end reads using Trimmomatic.
 
     Parameters
@@ -57,6 +61,15 @@ def trim_paired(
         Cut reads to this length by removing bases from the end (CROP).
         Applied after quality trimming but before MINLEN. Set to 0 to disable.
         Default is 0.
+    seed_mismatches : int, optional
+        Maximum mismatches allowed in the adapter seed used by ILLUMINACLIP.
+        Default is 2.
+    palindrome_clip_threshold : int, optional
+        Threshold used by paired-end palindrome mode in ILLUMINACLIP.
+        Default is 30.
+    simple_clip_threshold : int, optional
+        Threshold used by simple adapter clipping in ILLUMINACLIP.
+        Default is 10.
 
     Returns
     -------
@@ -99,7 +112,7 @@ def trim_paired(
         if head_crop > 0:
             cmd.append(f"HEADCROP:{head_crop}")
         cmd += [
-            f"ILLUMINACLIP:{adapter_path}:2:30:10",
+            f"ILLUMINACLIP:{adapter_path}:{seed_mismatches}:{palindrome_clip_threshold}:{simple_clip_threshold}",
             f"LEADING:{leading}",
             f"TRAILING:{trailing}",
             f"SLIDINGWINDOW:{sliding_window_size}:{sliding_window_quality}",
@@ -123,7 +136,9 @@ def trim_single(
     min_length: int = 100,
     head_crop: int = 0,
     crop: int = 0,
-) -> (SingleLanePerSampleSingleEndFastqDirFmt,):  # type: ignore[syntax]
+    seed_mismatches: int = 2,
+    simple_clip_threshold: int = 10,
+) -> SingleLanePerSampleSingleEndFastqDirFmt:
     """Trim single-end reads using Trimmomatic.
 
     Parameters
@@ -155,6 +170,12 @@ def trim_single(
         Cut reads to this length by removing bases from the end (CROP).
         Applied after quality trimming but before MINLEN. Set to 0 to disable.
         Default is 0.
+    seed_mismatches : int, optional
+        Maximum mismatches allowed in the adapter seed used by ILLUMINACLIP.
+        Default is 2.
+    simple_clip_threshold : int, optional
+        Threshold used by simple adapter clipping in ILLUMINACLIP.
+        Default is 10.
 
     Returns
     -------
@@ -184,7 +205,7 @@ def trim_single(
         if head_crop > 0:
             cmd.append(f"HEADCROP:{head_crop}")
         cmd += [
-            f"ILLUMINACLIP:{adapter_path}:2:10",
+            f"ILLUMINACLIP:{adapter_path}:{seed_mismatches}:{simple_clip_threshold}",
             f"LEADING:{leading}",
             f"TRAILING:{trailing}",
             f"SLIDINGWINDOW:{sliding_window_size}:{sliding_window_quality}",
@@ -195,4 +216,11 @@ def trim_single(
 
         subprocess.run(cmd, check=True)
 
-    return (trimmed,)
+    return trimmed
+
+
+trim_paired.__annotations__["return"] = (
+    SingleLanePerSamplePairedEndFastqDirFmt,
+    SingleLanePerSampleSingleEndFastqDirFmt,
+    SingleLanePerSampleSingleEndFastqDirFmt,
+)

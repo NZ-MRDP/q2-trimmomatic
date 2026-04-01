@@ -1,10 +1,42 @@
-"""Parallel trimmomatic pipelines using the QIIME 2 pipeline/ctx pattern."""
+"""Parallel trimmomatic split/apply/combine helpers and pipelines."""
 
+import os
+from pathlib import Path
+
+import pandas as pd
 from qiime2.util import duplicate
 
 from q2_types.per_sample_sequences import (
     CasavaOneEightSingleLanePerSampleDirFmt,
+    SingleLanePerSamplePairedEndFastqDirFmt,
+    SingleLanePerSampleSingleEndFastqDirFmt,
 )
+
+
+def split_paired_samples(
+    paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt,
+    num_partitions: int | None = None,
+) -> SingleLanePerSamplePairedEndFastqDirFmt:
+    """Split paired-end samples into a collection of smaller artifacts."""
+    return _split_sequences(
+        sequences=paired_sequences,
+        output_factory=SingleLanePerSamplePairedEndFastqDirFmt,
+        num_partitions=num_partitions,
+        num_reads_per_sample=2,
+    )
+
+
+def split_single_samples(
+    sequences: SingleLanePerSampleSingleEndFastqDirFmt,
+    num_partitions: int | None = None,
+) -> SingleLanePerSampleSingleEndFastqDirFmt:
+    """Split single-end samples into a collection of smaller artifacts."""
+    return _split_sequences(
+        sequences=sequences,
+        output_factory=SingleLanePerSampleSingleEndFastqDirFmt,
+        num_partitions=num_partitions,
+        num_reads_per_sample=1,
+    )
 
 
 def collate_trimmed_paired(
@@ -12,7 +44,7 @@ def collate_trimmed_paired(
 ) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Collate trimmed paired-end sequence partitions into a single artifact."""
     result = CasavaOneEightSingleLanePerSampleDirFmt()
-    for partition in trimmed:
+    for partition in _iter_collection_values(trimmed):
         for fp in partition.path.iterdir():
             duplicate(fp, result.path / fp.name)
     return result
@@ -23,7 +55,7 @@ def collate_trimmed_single(
 ) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Collate trimmed single-end sequence partitions into a single artifact."""
     result = CasavaOneEightSingleLanePerSampleDirFmt()
-    for partition in trimmed:
+    for partition in _iter_collection_values(trimmed):
         for fp in partition.path.iterdir():
             duplicate(fp, result.path / fp.name)
     return result
@@ -46,62 +78,13 @@ def trim_paired_parallel(
     palindrome_clip_threshold=30,
     simple_clip_threshold=10,
 ):
-    """Parallel adapter trimming and quality control for paired-end reads.
-
-    Partitions samples across workers using ``demux.partition_samples_paired``,
-    trims each partition independently with ``trimmomatic.trim_paired``, then
-    collates the results back into single artifacts.  When a parallel execution
-    backend (e.g. parsl) is configured, each partition runs concurrently.
-
-    Parameters
-    ----------
-    ctx : qiime2.sdk.Context
-        QIIME 2 pipeline context used to look up registered actions.
-    paired_sequences : SampleData[PairedEndSequencesWithQuality]
-        Paired-end FASTQ sequence data to trim.
-    num_partitions : int, optional
-        Number of partitions to split samples into. Defaults to one partition
-        per sample.
-    adapter_file : str, optional
-        Bundled adapter FASTA file for ILLUMINACLIP. Default is
-        "NexteraPE-PE.fa".
-    leading : int, optional
-        Minimum quality to keep a base at the 5' end (LEADING). Default 3.
-    trailing : int, optional
-        Minimum quality to keep a base at the 3' end (TRAILING). Default 3.
-    sliding_window_size : int, optional
-        Sliding window width for quality averaging (SLIDINGWINDOW). Default 4.
-    sliding_window_quality : int, optional
-        Minimum average quality within the sliding window. Default 15.
-    min_length : int, optional
-        Minimum read length after trimming (MINLEN). Default 100.
-    head_crop : int, optional
-        Bases to remove from the 5' end (HEADCROP). Set to 0 to disable.
-    crop : int, optional
-        Cut reads to this length from the 3' end (CROP). Set to 0 to disable.
-    seed_mismatches : int, optional
-        Maximum mismatches in the ILLUMINACLIP seed. Default 2.
-    palindrome_clip_threshold : int, optional
-        Threshold for palindrome adapter clipping (PE only). Default 30.
-    simple_clip_threshold : int, optional
-        Threshold for simple adapter clipping. Default 10.
-
-    Returns
-    -------
-    SampleData[PairedEndSequencesWithQuality]
-        Trimmed paired-end reads where both mates passed filtering.
-    SampleData[SequencesWithQuality]
-        Trimmed forward reads whose reverse mate failed filtering.
-    SampleData[SequencesWithQuality]
-        Trimmed reverse reads whose forward mate failed filtering.
-
-    """
+    """Parallel adapter trimming and quality control for paired-end reads."""
     _trim_paired = ctx.get_action("trimmomatic", "trim_paired")
-    _partition = ctx.get_action("demux", "partition_samples_paired")
+    _split = ctx.get_action("trimmomatic", "split_paired_samples")
     _collate_pe = ctx.get_action("trimmomatic", "collate_trimmed_paired")
     _collate_se = ctx.get_action("trimmomatic", "collate_trimmed_single")
 
-    (partitioned_seqs,) = _partition(paired_sequences, num_partitions)
+    (partitioned_seqs,) = _split(paired_sequences, num_partitions=num_partitions)
 
     pe_trimmed_parts = []
     unpaired_fwd_parts = []
@@ -150,56 +133,12 @@ def trim_single_parallel(
     seed_mismatches=2,
     simple_clip_threshold=10,
 ):
-    """Parallel adapter trimming and quality control for single-end reads.
-
-    Partitions samples across workers using ``demux.partition_samples_single``,
-    trims each partition independently with ``trimmomatic.trim_single``, then
-    collates the results back into a single artifact.  When a parallel
-    execution backend (e.g. parsl) is configured, each partition runs
-    concurrently.
-
-    Parameters
-    ----------
-    ctx : qiime2.sdk.Context
-        QIIME 2 pipeline context used to look up registered actions.
-    sequences : SampleData[SequencesWithQuality]
-        Single-end FASTQ sequence data to trim.
-    num_partitions : int, optional
-        Number of partitions to split samples into. Defaults to one partition
-        per sample.
-    adapter_file : str, optional
-        Bundled adapter FASTA file for ILLUMINACLIP. Default is
-        "TruSeq3-SE.fa".
-    leading : int, optional
-        Minimum quality to keep a base at the 5' end (LEADING). Default 3.
-    trailing : int, optional
-        Minimum quality to keep a base at the 3' end (TRAILING). Default 3.
-    sliding_window_size : int, optional
-        Sliding window width for quality averaging (SLIDINGWINDOW). Default 4.
-    sliding_window_quality : int, optional
-        Minimum average quality within the sliding window. Default 15.
-    min_length : int, optional
-        Minimum read length after trimming (MINLEN). Default 100.
-    head_crop : int, optional
-        Bases to remove from the 5' end (HEADCROP). Set to 0 to disable.
-    crop : int, optional
-        Cut reads to this length from the 3' end (CROP). Set to 0 to disable.
-    seed_mismatches : int, optional
-        Maximum mismatches in the ILLUMINACLIP seed. Default 2.
-    simple_clip_threshold : int, optional
-        Threshold for simple adapter clipping. Default 10.
-
-    Returns
-    -------
-    SampleData[SequencesWithQuality]
-        Trimmed single-end reads that passed filtering.
-
-    """
+    """Parallel adapter trimming and quality control for single-end reads."""
     _trim_single = ctx.get_action("trimmomatic", "trim_single")
-    _partition = ctx.get_action("demux", "partition_samples_single")
+    _split = ctx.get_action("trimmomatic", "split_single_samples")
     _collate_se = ctx.get_action("trimmomatic", "collate_trimmed_single")
 
-    (partitioned_seqs,) = _partition(sequences, num_partitions)
+    (partitioned_seqs,) = _split(sequences, num_partitions=num_partitions)
 
     trimmed_parts = []
     for seqs in partitioned_seqs.values():
@@ -221,3 +160,73 @@ def trim_single_parallel(
 
     (collated_trimmed,) = _collate_se(trimmed_parts)
     return collated_trimmed
+
+
+def _split_sequences(sequences, output_factory, num_partitions, num_reads_per_sample):
+    """Create self-contained partition artifacts from an input sequence artifact."""
+    df = sequences.manifest.view(pd.DataFrame)
+    sample_ids = list(df.index)
+    partition_ids = _partition_ids(sample_ids, num_partitions)
+    result = {}
+
+    for idx, sample_id_partition in enumerate(partition_ids):
+        partition = output_factory()
+        _copy_if_exists(sequences.path / "metadata.yml", partition.path / "metadata.yml")
+
+        manifest_rows = []
+        partition_df = df.loc[sample_id_partition]
+        for sample_id, row in partition_df.iterrows():
+            filenames = row.tolist()
+            directions = _directions_for_sample(num_reads_per_sample)
+            for filename, direction in zip(filenames, directions, strict=True):
+                source = Path(filename)
+                destination_name = os.path.basename(filename)
+                duplicate(source, partition.path / destination_name)
+                manifest_rows.append((sample_id, destination_name, direction))
+
+        _write_manifest(partition.path / "MANIFEST", manifest_rows)
+        result[str(idx)] = partition
+
+    return result
+
+
+def _partition_ids(sample_ids, num_partitions):
+    """Spread sample ids across a bounded number of non-empty partitions."""
+    if not sample_ids:
+        return []
+
+    if num_partitions is None:
+        num_partitions = len(sample_ids)
+
+    num_partitions = max(1, min(num_partitions, len(sample_ids)))
+    return [sample_ids[idx::num_partitions] for idx in range(num_partitions)]
+
+
+def _directions_for_sample(num_reads_per_sample):
+    """Return manifest direction labels for one or two reads per sample."""
+    if num_reads_per_sample == 1:
+        return ("forward",)
+
+    return ("forward", "reverse")
+
+
+def _write_manifest(path, rows):
+    """Write a per-sample FASTQ manifest for a partition artifact."""
+    with open(path, "w") as fh:
+        fh.write("sample-id,filename,direction\n")
+        for sample_id, filename, direction in rows:
+            fh.write(f"{sample_id},{filename},{direction}\n")
+
+
+def _copy_if_exists(source, destination):
+    """Duplicate a file into the destination path when it exists."""
+    if source.exists():
+        duplicate(source, destination)
+
+
+def _iter_collection_values(collection):
+    """Iterate over list-like or mapping-like QIIME collections."""
+    if hasattr(collection, "values"):
+        return collection.values()
+
+    return collection

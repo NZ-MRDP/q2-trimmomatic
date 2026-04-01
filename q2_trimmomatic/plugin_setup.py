@@ -5,7 +5,7 @@ from q2_types.per_sample_sequences import (
     SequencesWithQuality,
 )
 from q2_types.sample_data import SampleData
-from qiime2.plugin import Choices, Int, List, Plugin, Range, Str, Threads
+from qiime2.plugin import Collection, Choices, Int, List, Plugin, Range, Str, Threads
 
 import q2_trimmomatic
 
@@ -29,7 +29,10 @@ _ADAPTER_FILE_DESCRIPTION = (
 )
 
 _SHARED_PARAMETER_DESCRIPTIONS = {
-    "threads": "Number of CPU threads to use per Trimmomatic process.",
+    "threads": (
+        "Number of CPU threads to use per Trimmomatic process. Use 0 or auto "
+        "to let Trimmomatic choose based on available resources."
+    ),
     "leading": (
         "Minimum quality required to keep a base at the start of a read (LEADING). "
         "Bases below this threshold are removed."
@@ -142,6 +145,66 @@ plugin.methods.register_function(
     },
     output_descriptions={
         "trimmed": "Trimmed single-end reads that passed the requested adapter and quality filters.",
+    },
+)
+
+plugin.methods.register_function(
+    function=q2_trimmomatic.split_paired_samples,
+    name="Split paired-end samples into partitions",
+    description=(
+        "Split paired-end sequence data into a collection of smaller "
+        "artifacts for use in the plugin's parallel trimming pipeline."
+    ),
+    inputs={
+        "paired_sequences": SampleData[PairedEndSequencesWithQuality],
+    },
+    parameters={
+        "num_partitions": Int % Range(1, None),
+    },
+    outputs=[
+        ("partitions", Collection[SampleData[PairedEndSequencesWithQuality]]),
+    ],
+    input_descriptions={
+        "paired_sequences": "Illumina paired-end sequence data.",
+    },
+    parameter_descriptions={
+        "num_partitions": (
+            "Number of partitions to split samples into. Defaults to one "
+            "partition per sample."
+        ),
+    },
+    output_descriptions={
+        "partitions": "A collection of smaller paired-end sequence artifacts.",
+    },
+)
+
+plugin.methods.register_function(
+    function=q2_trimmomatic.split_single_samples,
+    name="Split single-end samples into partitions",
+    description=(
+        "Split single-end sequence data into a collection of smaller "
+        "artifacts for use in the plugin's parallel trimming pipeline."
+    ),
+    inputs={
+        "sequences": SampleData[SequencesWithQuality],
+    },
+    parameters={
+        "num_partitions": Int % Range(1, None),
+    },
+    outputs=[
+        ("partitions", Collection[SampleData[SequencesWithQuality]]),
+    ],
+    input_descriptions={
+        "sequences": "Illumina single-end sequence data.",
+    },
+    parameter_descriptions={
+        "num_partitions": (
+            "Number of partitions to split samples into. Defaults to one "
+            "partition per sample."
+        ),
+    },
+    output_descriptions={
+        "partitions": "A collection of smaller single-end sequence artifacts.",
     },
 )
 

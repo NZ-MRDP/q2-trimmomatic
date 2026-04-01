@@ -3,10 +3,9 @@
 import os
 import subprocess
 from importlib.resources import files
-from typing import Tuple
-
 import pandas as pd
 from q2_types.per_sample_sequences import (
+    CasavaOneEightSingleLanePerSampleDirFmt,
     SingleLanePerSamplePairedEndFastqDirFmt,
     SingleLanePerSampleSingleEndFastqDirFmt,
 )
@@ -25,11 +24,9 @@ def trim_paired(
     seed_mismatches: int = 2,
     palindrome_clip_threshold: int = 30,
     simple_clip_threshold: int = 10,
-) -> Tuple[
-    SingleLanePerSamplePairedEndFastqDirFmt,
-    SingleLanePerSampleSingleEndFastqDirFmt,
-    SingleLanePerSampleSingleEndFastqDirFmt,
-]:
+) -> (CasavaOneEightSingleLanePerSampleDirFmt,
+      CasavaOneEightSingleLanePerSampleDirFmt,
+      CasavaOneEightSingleLanePerSampleDirFmt):
     """Trim paired-end reads using Trimmomatic.
 
     Parameters
@@ -73,28 +70,23 @@ def trim_paired(
 
     Returns
     -------
-    SingleLanePerSamplePairedEndFastqDirFmt
+    CasavaOneEightSingleLanePerSampleDirFmt
         Trimmed paired-end sequences (both reads survived trimming).
-    SingleLanePerSampleSingleEndFastqDirFmt
+    CasavaOneEightSingleLanePerSampleDirFmt
         Trimmed unpaired forward reads (reverse read failed trimming).
-    SingleLanePerSampleSingleEndFastqDirFmt
+    CasavaOneEightSingleLanePerSampleDirFmt
         Trimmed unpaired reverse reads (forward read failed trimming).
 
     """
     adapter_path = files("q2_trimmomatic.bin.adapters").joinpath(adapter_file)
     executable_path = files("q2_trimmomatic.bin").joinpath("trimmomatic-0.39.jar")
 
-    paired_end_trimmed = SingleLanePerSamplePairedEndFastqDirFmt()
-    unpaired_fwd = SingleLanePerSampleSingleEndFastqDirFmt()
-    unpaired_rev = SingleLanePerSampleSingleEndFastqDirFmt()
+    paired_end_trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
+    unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
+    unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
 
     df = paired_sequences.manifest.view(pd.DataFrame)
     for _, fwd, rev in df.itertuples():
-        trimmed_paired_fwd = os.path.join(str(paired_end_trimmed), os.path.basename(fwd))
-        trimmed_paired_rev = os.path.join(str(paired_end_trimmed), os.path.basename(rev))
-        trimmed_unpaired_fwd = os.path.join(str(unpaired_fwd), os.path.basename(fwd))
-        trimmed_unpaired_rev = os.path.join(str(unpaired_rev), os.path.basename(rev))
-
         # Trimmomatic processes steps in order. HEADCROP runs first (before adapter
         # clipping), CROP runs after quality trimming but before MINLEN.
         cmd = [
@@ -104,10 +96,10 @@ def trim_paired(
             "PE",
             fwd,
             rev,
-            trimmed_paired_fwd,
-            trimmed_unpaired_fwd,
-            trimmed_paired_rev,
-            trimmed_unpaired_rev,
+            str(paired_end_trimmed.path / os.path.basename(fwd)),
+            str(unpaired_fwd.path / os.path.basename(fwd)),
+            str(paired_end_trimmed.path / os.path.basename(rev)),
+            str(unpaired_rev.path / os.path.basename(rev)),
         ]
         if head_crop > 0:
             cmd.append(f"HEADCROP:{head_crop}")
@@ -138,7 +130,7 @@ def trim_single(
     crop: int = 0,
     seed_mismatches: int = 2,
     simple_clip_threshold: int = 10,
-) -> SingleLanePerSampleSingleEndFastqDirFmt:
+) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Trim single-end reads using Trimmomatic.
 
     Parameters
@@ -179,19 +171,17 @@ def trim_single(
 
     Returns
     -------
-    SingleLanePerSampleSingleEndFastqDirFmt
+    CasavaOneEightSingleLanePerSampleDirFmt
         Trimmed single-end sequences.
 
     """
     adapter_path = files("q2_trimmomatic.bin.adapters").joinpath(adapter_file)
     executable_path = files("q2_trimmomatic.bin").joinpath("trimmomatic-0.39.jar")
 
-    trimmed = SingleLanePerSampleSingleEndFastqDirFmt()
+    trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
 
     df = sequences.manifest.view(pd.DataFrame)
     for _, filepath in df.itertuples():
-        trimmed_path = os.path.join(str(trimmed), os.path.basename(filepath))
-
         # Trimmomatic SE ILLUMINACLIP takes seedMismatches:simpleClipThreshold
         # (no palindromeClipThreshold — that is PE-only).
         cmd = [
@@ -200,7 +190,7 @@ def trim_single(
             str(executable_path),
             "SE",
             filepath,
-            trimmed_path,
+            str(trimmed.path / os.path.basename(filepath)),
         ]
         if head_crop > 0:
             cmd.append(f"HEADCROP:{head_crop}")
@@ -217,10 +207,3 @@ def trim_single(
         subprocess.run(cmd, check=True)
 
     return trimmed
-
-
-trim_paired.__annotations__["return"] = (
-    SingleLanePerSamplePairedEndFastqDirFmt,
-    SingleLanePerSampleSingleEndFastqDirFmt,
-    SingleLanePerSampleSingleEndFastqDirFmt,
-)

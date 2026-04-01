@@ -24,6 +24,7 @@ def trim_paired(
     seed_mismatches: int = 2,
     palindrome_clip_threshold: int = 30,
     simple_clip_threshold: int = 10,
+    threads: int = 1,
 ) -> (CasavaOneEightSingleLanePerSampleDirFmt,
       CasavaOneEightSingleLanePerSampleDirFmt,
       CasavaOneEightSingleLanePerSampleDirFmt):
@@ -94,6 +95,7 @@ def trim_paired(
             "-jar",
             str(executable_path),
             "PE",
+            "-threads", str(threads),
             fwd,
             rev,
             str(paired_end_trimmed.path / os.path.basename(fwd)),
@@ -130,6 +132,7 @@ def trim_single(
     crop: int = 0,
     seed_mismatches: int = 2,
     simple_clip_threshold: int = 10,
+    threads: int = 1,
 ) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Trim single-end reads using Trimmomatic.
 
@@ -189,6 +192,7 @@ def trim_single(
             "-jar",
             str(executable_path),
             "SE",
+            "-threads", str(threads),
             filepath,
             str(trimmed.path / os.path.basename(filepath)),
         ]

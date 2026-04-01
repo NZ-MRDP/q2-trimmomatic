@@ -5,7 +5,7 @@ from q2_types.per_sample_sequences import (
     SequencesWithQuality,
 )
 from q2_types.sample_data import SampleData
-from qiime2.plugin import Choices, Int, Plugin, Range, Str
+from qiime2.plugin import Choices, Int, List, Plugin, Range, Str, Threads
 
 import q2_trimmomatic
 
@@ -29,6 +29,7 @@ _ADAPTER_FILE_DESCRIPTION = (
 )
 
 _SHARED_PARAMETER_DESCRIPTIONS = {
+    "threads": "Number of CPU threads to use per Trimmomatic process.",
     "leading": (
         "Minimum quality required to keep a base at the start of a read (LEADING). "
         "Bases below this threshold are removed."
@@ -55,6 +56,7 @@ _SHARED_PARAMETER_DESCRIPTIONS = {
 }
 
 _SHARED_PARAMETERS = {
+    "threads": Threads,
     "leading": Int % Range(0, None),
     "trailing": Int % Range(0, None),
     "sliding_window_size": Int % Range(1, None),
@@ -135,6 +137,130 @@ plugin.methods.register_function(
         "sequences": "Illumina single-end sequence data.",
     },
     parameter_descriptions={
+        "adapter_file": _ADAPTER_FILE_DESCRIPTION,
+        **_SHARED_PARAMETER_DESCRIPTIONS,
+    },
+    output_descriptions={
+        "trimmed": "Trimmed single-end reads that passed the requested adapter and quality filters.",
+    },
+)
+
+plugin.methods.register_function(
+    function=q2_trimmomatic.collate_trimmed_paired,
+    name="Collate trimmed paired-end sequence partitions",
+    description=(
+        "Collate a collection of trimmed paired-end sequence artifacts "
+        "(produced by a parallel pipeline) into a single artifact."
+    ),
+    inputs={
+        "trimmed": List[SampleData[PairedEndSequencesWithQuality]],
+    },
+    parameters={},
+    outputs=[
+        ("collated", SampleData[PairedEndSequencesWithQuality]),
+    ],
+    input_descriptions={
+        "trimmed": "A list of trimmed paired-end sequence artifacts to collate.",
+    },
+    parameter_descriptions={},
+    output_descriptions={
+        "collated": "The collated trimmed paired-end sequences.",
+    },
+)
+
+plugin.methods.register_function(
+    function=q2_trimmomatic.collate_trimmed_single,
+    name="Collate trimmed single-end sequence partitions",
+    description=(
+        "Collate a collection of trimmed single-end sequence artifacts "
+        "(produced by a parallel pipeline) into a single artifact."
+    ),
+    inputs={
+        "trimmed": List[SampleData[SequencesWithQuality]],
+    },
+    parameters={},
+    outputs=[
+        ("collated", SampleData[SequencesWithQuality]),
+    ],
+    input_descriptions={
+        "trimmed": "A list of trimmed single-end sequence artifacts to collate.",
+    },
+    parameter_descriptions={},
+    output_descriptions={
+        "collated": "The collated trimmed single-end sequences.",
+    },
+)
+
+plugin.pipelines.register_function(
+    function=q2_trimmomatic.trim_paired_parallel,
+    name="Parallel adapter trimming of paired-end sequences",
+    description=(
+        "Partition samples, trim each partition in parallel using "
+        "trimmomatic.trim_paired, then collate the results. When a parallel "
+        "execution backend is configured (e.g. parsl), partitions are "
+        "processed concurrently."
+    ),
+    inputs={
+        "paired_sequences": SampleData[PairedEndSequencesWithQuality],
+    },
+    parameters={
+        "num_partitions": Int % Range(1, None),
+        "adapter_file": Str % Choices(_ADAPTER_FILES_PE),
+        **_SHARED_PARAMETERS,
+        **_PAIRED_ONLY_PARAMETERS,
+    },
+    outputs=[
+        ("paired_end_trimmed", SampleData[PairedEndSequencesWithQuality]),
+        ("unpaired_fwd", SampleData[SequencesWithQuality]),
+        ("unpaired_rev", SampleData[SequencesWithQuality]),
+    ],
+    input_descriptions={
+        "paired_sequences": "Illumina paired-end sequence data.",
+    },
+    parameter_descriptions={
+        "num_partitions": (
+            "Number of partitions to split samples into for parallel "
+            "processing. Defaults to one partition per sample."
+        ),
+        "adapter_file": _ADAPTER_FILE_DESCRIPTION,
+        **_SHARED_PARAMETER_DESCRIPTIONS,
+        **_PAIRED_ONLY_PARAMETER_DESCRIPTIONS,
+    },
+    output_descriptions={
+        "paired_end_trimmed": "Trimmed paired-end reads where both mates passed filtering.",
+        "unpaired_fwd": "Trimmed forward reads whose reverse mate failed filtering.",
+        "unpaired_rev": "Trimmed reverse reads whose forward mate failed filtering.",
+    },
+)
+
+plugin.pipelines.register_function(
+    function=q2_trimmomatic.trim_single_parallel,
+    name="Parallel adapter trimming of single-end sequences",
+    description=(
+        "Partition samples, trim each partition in parallel using "
+        "trimmomatic.trim_single, then collate the results. When a parallel "
+        "execution backend is configured (e.g. parsl), partitions are "
+        "processed concurrently."
+    ),
+    inputs={
+        "sequences": SampleData[SequencesWithQuality],
+    },
+    parameters={
+        "num_partitions": Int % Range(1, None),
+        "adapter_file": Str % Choices(_ADAPTER_FILES_SE),
+        **_SHARED_PARAMETERS,
+    },
+    outputs=[
+        ("trimmed", SampleData[SequencesWithQuality]),
+    ],
+    input_descriptions={
+        "sequences": "Illumina single-end sequence data.",
+    },
+    parameter_descriptions={
+        "num_partitions": (
+            "Number of partitions to split samples into for parallel "
+            "processing. Defaults to one partition per sample."
+        ),
         "adapter_file": _ADAPTER_FILE_DESCRIPTION,
         **_SHARED_PARAMETER_DESCRIPTIONS,
     },

@@ -3,6 +3,7 @@
 import os
 import subprocess
 from importlib.resources import files
+
 import pandas as pd
 from q2_types.per_sample_sequences import (
     CasavaOneEightSingleLanePerSampleDirFmt,
@@ -24,6 +25,7 @@ def trim_paired(
     seed_mismatches: int = 2,
     palindrome_clip_threshold: int = 30,
     simple_clip_threshold: int = 10,
+    threads: int | str = 1,
 ) -> (CasavaOneEightSingleLanePerSampleDirFmt,
       CasavaOneEightSingleLanePerSampleDirFmt,
       CasavaOneEightSingleLanePerSampleDirFmt):
@@ -67,6 +69,9 @@ def trim_paired(
     simple_clip_threshold : int, optional
         Threshold used by simple adapter clipping in ILLUMINACLIP.
         Default is 10.
+    threads : int or {"auto"}, optional
+        Number of Trimmomatic threads to request. Use 0 or "auto" to let
+        Trimmomatic choose automatically. Default is 1.
 
     Returns
     -------
@@ -80,6 +85,7 @@ def trim_paired(
     """
     adapter_path = files("q2_trimmomatic.bin.adapters").joinpath(adapter_file)
     executable_path = files("q2_trimmomatic.bin").joinpath("trimmomatic-0.39.jar")
+    thread_args = _build_thread_args(threads)
 
     paired_end_trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
@@ -94,6 +100,7 @@ def trim_paired(
             "-jar",
             str(executable_path),
             "PE",
+            *thread_args,
             fwd,
             rev,
             str(paired_end_trimmed.path / os.path.basename(fwd)),
@@ -130,6 +137,7 @@ def trim_single(
     crop: int = 0,
     seed_mismatches: int = 2,
     simple_clip_threshold: int = 10,
+    threads: int | str = 1,
 ) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Trim single-end reads using Trimmomatic.
 
@@ -168,6 +176,9 @@ def trim_single(
     simple_clip_threshold : int, optional
         Threshold used by simple adapter clipping in ILLUMINACLIP.
         Default is 10.
+    threads : int or {"auto"}, optional
+        Number of Trimmomatic threads to request. Use 0 or "auto" to let
+        Trimmomatic choose automatically. Default is 1.
 
     Returns
     -------
@@ -177,6 +188,7 @@ def trim_single(
     """
     adapter_path = files("q2_trimmomatic.bin.adapters").joinpath(adapter_file)
     executable_path = files("q2_trimmomatic.bin").joinpath("trimmomatic-0.39.jar")
+    thread_args = _build_thread_args(threads)
 
     trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
 
@@ -189,6 +201,7 @@ def trim_single(
             "-jar",
             str(executable_path),
             "SE",
+            *thread_args,
             filepath,
             str(trimmed.path / os.path.basename(filepath)),
         ]
@@ -207,3 +220,14 @@ def trim_single(
         subprocess.run(cmd, check=True)
 
     return trimmed
+
+
+def _build_thread_args(threads):
+    """Translate QIIME ``Threads`` values to Trimmomatic CLI arguments."""
+    if threads in (None, 0, "auto"):
+        return []
+
+    if isinstance(threads, str) and threads.isdigit():
+        threads = int(threads)
+
+    return ["-threads", str(threads)]

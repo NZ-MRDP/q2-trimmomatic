@@ -1,8 +1,10 @@
 """Trimmomatic adapter trimming and quality control functions."""
 
-import os
-import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from importlib.resources import files
+import os
+import shutil
+import subprocess
 
 import pandas as pd
 from q2_types.per_sample_sequences import (
@@ -15,6 +17,7 @@ from q2_types.per_sample_sequences import (
 def trim_paired(
     paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt,
     adapter_file: str = "NexteraPE-PE.fa",
+    n_jobs: int = 1,
     leading: int = 3,
     trailing: int = 3,
     sliding_window_size: int = 4,
@@ -38,6 +41,9 @@ def trim_paired(
     adapter_file : str, optional
         Name of the bundled adapter FASTA file to use for ILLUMINACLIP.
         Default is "NexteraPE-PE.fa".
+    n_jobs : int, optional
+        Number of samples to process concurrently. Each concurrent job
+        launches a separate Trimmomatic process. Default is 1.
     leading : int, optional
         Minimum quality required to keep a base at the start of a read (LEADING).
         Default is 3.
@@ -87,40 +93,39 @@ def trim_paired(
     executable_path = files("q2_trimmomatic.bin").joinpath("trimmomatic-0.39.jar")
     thread_args = _build_thread_args(threads)
 
+    tasks = [
+        (fwd, rev)
+        for _, fwd, rev in paired_sequences.manifest.view(pd.DataFrame).itertuples()
+    ]
+    partitions = _run_parallel(
+        tasks,
+        n_jobs=n_jobs,
+        func=lambda task: _trim_paired_partition(
+            executable_path=executable_path,
+            adapter_path=adapter_path,
+            thread_args=thread_args,
+            fwd=task[0],
+            rev=task[1],
+            head_crop=head_crop,
+            seed_mismatches=seed_mismatches,
+            palindrome_clip_threshold=palindrome_clip_threshold,
+            simple_clip_threshold=simple_clip_threshold,
+            leading=leading,
+            trailing=trailing,
+            sliding_window_size=sliding_window_size,
+            sliding_window_quality=sliding_window_quality,
+            crop=crop,
+            min_length=min_length,
+        ),
+    )
+
     paired_end_trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
     unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
-
-    df = paired_sequences.manifest.view(pd.DataFrame)
-    for _, fwd, rev in df.itertuples():
-        # Trimmomatic processes steps in order. HEADCROP runs first (before adapter
-        # clipping), CROP runs after quality trimming but before MINLEN.
-        cmd = [
-            "java",
-            "-jar",
-            str(executable_path),
-            "PE",
-            *thread_args,
-            fwd,
-            rev,
-            str(paired_end_trimmed.path / os.path.basename(fwd)),
-            str(unpaired_fwd.path / os.path.basename(fwd)),
-            str(paired_end_trimmed.path / os.path.basename(rev)),
-            str(unpaired_rev.path / os.path.basename(rev)),
-        ]
-        if head_crop > 0:
-            cmd.append(f"HEADCROP:{head_crop}")
-        cmd += [
-            f"ILLUMINACLIP:{adapter_path}:{seed_mismatches}:{palindrome_clip_threshold}:{simple_clip_threshold}",
-            f"LEADING:{leading}",
-            f"TRAILING:{trailing}",
-            f"SLIDINGWINDOW:{sliding_window_size}:{sliding_window_quality}",
-        ]
-        if crop > 0:
-            cmd.append(f"CROP:{crop}")
-        cmd.append(f"MINLEN:{min_length}")
-
-        subprocess.run(cmd, check=True)
+    for paired_partition, fwd_partition, rev_partition in partitions:
+        _collate_partition(paired_partition, paired_end_trimmed)
+        _collate_partition(fwd_partition, unpaired_fwd)
+        _collate_partition(rev_partition, unpaired_rev)
 
     return paired_end_trimmed, unpaired_fwd, unpaired_rev
 
@@ -128,6 +133,7 @@ def trim_paired(
 def trim_single(
     sequences: SingleLanePerSampleSingleEndFastqDirFmt,
     adapter_file: str = "TruSeq3-SE.fa",
+    n_jobs: int = 1,
     leading: int = 3,
     trailing: int = 3,
     sliding_window_size: int = 4,
@@ -148,6 +154,9 @@ def trim_single(
     adapter_file : str, optional
         Name of the bundled adapter FASTA file to use for ILLUMINACLIP.
         Default is "TruSeq3-SE.fa".
+    n_jobs : int, optional
+        Number of samples to process concurrently. Each concurrent job
+        launches a separate Trimmomatic process. Default is 1.
     leading : int, optional
         Minimum quality required to keep a base at the start of a read (LEADING).
         Default is 3.
@@ -190,36 +199,142 @@ def trim_single(
     executable_path = files("q2_trimmomatic.bin").joinpath("trimmomatic-0.39.jar")
     thread_args = _build_thread_args(threads)
 
+    tasks = [filepath for _, filepath in sequences.manifest.view(pd.DataFrame).itertuples()]
+    partitions = _run_parallel(
+        tasks,
+        n_jobs=n_jobs,
+        func=lambda filepath: _trim_single_partition(
+            executable_path=executable_path,
+            adapter_path=adapter_path,
+            thread_args=thread_args,
+            filepath=filepath,
+            head_crop=head_crop,
+            seed_mismatches=seed_mismatches,
+            simple_clip_threshold=simple_clip_threshold,
+            leading=leading,
+            trailing=trailing,
+            sliding_window_size=sliding_window_size,
+            sliding_window_quality=sliding_window_quality,
+            crop=crop,
+            min_length=min_length,
+        ),
+    )
+
     trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
-
-    df = sequences.manifest.view(pd.DataFrame)
-    for _, filepath in df.itertuples():
-        # Trimmomatic SE ILLUMINACLIP takes seedMismatches:simpleClipThreshold
-        # (no palindromeClipThreshold — that is PE-only).
-        cmd = [
-            "java",
-            "-jar",
-            str(executable_path),
-            "SE",
-            *thread_args,
-            filepath,
-            str(trimmed.path / os.path.basename(filepath)),
-        ]
-        if head_crop > 0:
-            cmd.append(f"HEADCROP:{head_crop}")
-        cmd += [
-            f"ILLUMINACLIP:{adapter_path}:{seed_mismatches}:{simple_clip_threshold}",
-            f"LEADING:{leading}",
-            f"TRAILING:{trailing}",
-            f"SLIDINGWINDOW:{sliding_window_size}:{sliding_window_quality}",
-        ]
-        if crop > 0:
-            cmd.append(f"CROP:{crop}")
-        cmd.append(f"MINLEN:{min_length}")
-
-        subprocess.run(cmd, check=True)
+    for partition in partitions:
+        _collate_partition(partition, trimmed)
 
     return trimmed
+
+
+def _trim_paired_partition(
+    executable_path,
+    adapter_path,
+    thread_args,
+    fwd,
+    rev,
+    head_crop,
+    seed_mismatches,
+    palindrome_clip_threshold,
+    simple_clip_threshold,
+    leading,
+    trailing,
+    sliding_window_size,
+    sliding_window_quality,
+    crop,
+    min_length,
+):
+    """Run Trimmomatic on a single paired-end sample pair."""
+    paired_end_trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
+    unpaired_fwd = CasavaOneEightSingleLanePerSampleDirFmt()
+    unpaired_rev = CasavaOneEightSingleLanePerSampleDirFmt()
+
+    cmd = [
+        "java",
+        "-jar",
+        str(executable_path),
+        "PE",
+        *thread_args,
+        fwd,
+        rev,
+        str(paired_end_trimmed.path / os.path.basename(fwd)),
+        str(unpaired_fwd.path / os.path.basename(fwd)),
+        str(paired_end_trimmed.path / os.path.basename(rev)),
+        str(unpaired_rev.path / os.path.basename(rev)),
+    ]
+    if head_crop > 0:
+        cmd.append(f"HEADCROP:{head_crop}")
+    cmd += [
+        f"ILLUMINACLIP:{adapter_path}:{seed_mismatches}:{palindrome_clip_threshold}:{simple_clip_threshold}",
+        f"LEADING:{leading}",
+        f"TRAILING:{trailing}",
+        f"SLIDINGWINDOW:{sliding_window_size}:{sliding_window_quality}",
+    ]
+    if crop > 0:
+        cmd.append(f"CROP:{crop}")
+    cmd.append(f"MINLEN:{min_length}")
+
+    subprocess.run(cmd, check=True)
+    return paired_end_trimmed, unpaired_fwd, unpaired_rev
+
+
+def _trim_single_partition(
+    executable_path,
+    adapter_path,
+    thread_args,
+    filepath,
+    head_crop,
+    seed_mismatches,
+    simple_clip_threshold,
+    leading,
+    trailing,
+    sliding_window_size,
+    sliding_window_quality,
+    crop,
+    min_length,
+):
+    """Run Trimmomatic on a single single-end sample."""
+    trimmed = CasavaOneEightSingleLanePerSampleDirFmt()
+
+    cmd = [
+        "java",
+        "-jar",
+        str(executable_path),
+        "SE",
+        *thread_args,
+        filepath,
+        str(trimmed.path / os.path.basename(filepath)),
+    ]
+    if head_crop > 0:
+        cmd.append(f"HEADCROP:{head_crop}")
+    cmd += [
+        f"ILLUMINACLIP:{adapter_path}:{seed_mismatches}:{simple_clip_threshold}",
+        f"LEADING:{leading}",
+        f"TRAILING:{trailing}",
+        f"SLIDINGWINDOW:{sliding_window_size}:{sliding_window_quality}",
+    ]
+    if crop > 0:
+        cmd.append(f"CROP:{crop}")
+    cmd.append(f"MINLEN:{min_length}")
+
+    subprocess.run(cmd, check=True)
+    return trimmed
+
+
+def _run_parallel(tasks, n_jobs, func):
+    """Run work serially or with a thread pool while preserving task order."""
+    if n_jobs == 1:
+        return [func(task) for task in tasks]
+
+    max_workers = min(n_jobs, len(tasks)) if tasks else 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return list(executor.map(func, tasks))
+
+
+def _collate_partition(source, destination):
+    """Copy all files from a partition output directory into the destination."""
+    for fp in source.path.iterdir():
+        shutil.copy2(fp, destination.path / fp.name)
 
 
 def _build_thread_args(threads):

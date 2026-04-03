@@ -114,7 +114,7 @@ def trim_single(
 def _split_paired_samples(
     paired_sequences: SingleLanePerSamplePairedEndFastqDirFmt,
     num_partitions: int | None = None,
-) -> dict[str, SingleLanePerSamplePairedEndFastqDirFmt]:
+) -> SingleLanePerSamplePairedEndFastqDirFmt:
     """Split paired-end samples into internal partition artifacts."""
     return _split_sequences(
         sequences=paired_sequences,
@@ -127,7 +127,7 @@ def _split_paired_samples(
 def _split_single_samples(
     sequences: SingleLanePerSampleSingleEndFastqDirFmt,
     num_partitions: int | None = None,
-) -> dict[str, SingleLanePerSampleSingleEndFastqDirFmt]:
+) -> SingleLanePerSampleSingleEndFastqDirFmt:
     """Split single-end samples into internal partition artifacts."""
     return _split_sequences(
         sequences=sequences,
@@ -138,14 +138,14 @@ def _split_single_samples(
 
 
 def _combine_paired_sequences(
-    trimmed: dict[str, CasavaOneEightSingleLanePerSampleDirFmt],
+    trimmed: CasavaOneEightSingleLanePerSampleDirFmt,
 ) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Combine paired-end partition outputs into one artifact."""
     return _combine_sequences(trimmed)
 
 
 def _combine_single_sequences(
-    trimmed: dict[str, CasavaOneEightSingleLanePerSampleDirFmt],
+    trimmed: CasavaOneEightSingleLanePerSampleDirFmt,
 ) -> CasavaOneEightSingleLanePerSampleDirFmt:
     """Combine single-end partition outputs into one artifact."""
     return _combine_sequences(trimmed)
